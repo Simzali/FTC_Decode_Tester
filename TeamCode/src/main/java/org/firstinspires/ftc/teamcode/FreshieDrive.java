@@ -1,50 +1,136 @@
 package org.firstinspires.ftc.teamcode;
 
-import com.qualcomm.robotcore.hardware.DcMotorEx;
+import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
+import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
+import com.qualcomm.robotcore.hardware.IMU;
+
+import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 
 public class FreshieDrive {
 
-    DcMotorEx fl; // reverse
-    DcMotorEx fr;
-    DcMotorEx bl; //reverse
-    DcMotorEx br;
+    DcMotor frontLeft;
+    DcMotor frontRight;
+    DcMotor backLeft;
+    DcMotor backRight;
+
+    IMU imu;
+    //GoBildaPinpointDriver pinpoint;
+    public final static double xOffset = -3.69;
+    public final static double yOffset = -1.879;
+
+    public FreshieDrive(HardwareMap hardwaremap) {
+        frontLeft = hardwaremap.get(DcMotor.class, "FL");
+        frontRight = hardwaremap.get(DcMotor.class, "FR");
+        backLeft = hardwaremap.get(DcMotor.class, "BL");
+        backRight = hardwaremap.get(DcMotor.class, "BR");
+        imu = hardwaremap.get(IMU.class, "imu");
+        //pinpoint = hardwaremap.get(GoBildaPinpointDriver.class, "pinpoint");
 
 
-    public FreshieDrive(HardwareMap hardwaremap)
-    {
-        fl = hardwaremap.get(DcMotorEx.class, "fl");
-        fr = hardwaremap.get(DcMotorEx.class, "fr");
-        bl = hardwaremap.get(DcMotorEx.class, "bl");
-        br = hardwaremap.get(DcMotorEx.class, "br");
+        frontLeft.setDirection(DcMotorSimple.Direction.REVERSE);   // Reverse this
+        frontRight.setDirection(DcMotorSimple.Direction.FORWARD);  // And this
+        backLeft.setDirection(DcMotorSimple.Direction.REVERSE);    // Keep
+        backRight.setDirection(DcMotorSimple.Direction.REVERSE);   // Keep
 
+        frontLeft.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        frontRight.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        backLeft.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        backRight.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+
+        frontLeft.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        frontRight.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        backLeft.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        backRight.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+
+        RevHubOrientationOnRobot.LogoFacingDirection logoDirection =
+                RevHubOrientationOnRobot.LogoFacingDirection.RIGHT;
+        RevHubOrientationOnRobot.UsbFacingDirection usbDirection =
+                RevHubOrientationOnRobot.UsbFacingDirection.UP;
+
+        RevHubOrientationOnRobot orientationOnRobot = new
+                RevHubOrientationOnRobot(logoDirection, usbDirection);
+        imu.initialize(new IMU.Parameters(orientationOnRobot));
+
+        //pinpoint.setOffsets(xOffset, yOffset, DistanceUnit.INCH);
+        //pinpoint.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD);
+        //pinpoint.setEncoderDirections(GoBildaPinpointDriver.EncoderDirection.FORWARD,
+                //GoBildaPinpointDriver.EncoderDirection.FORWARD);
+        //pinpoint.resetPosAndIMU();   // recalibrates IMU + zeroes pose; keep robot still
     }
 
-    public void drive(double forward, double right, double rotate) {
-        // This calculates the power needed for each wheel based on the amount of forward,
-        // strafe right, and rotate
-        double frontLeftPower = forward + right + rotate;
-        double frontRightPower = forward - right - rotate;
-        double backRightPower = forward + right - rotate;
-        double backLeftPower = forward - right + rotate;
+    public void fieldRelativeDrive(double forward, double right, double rotate, boolean resetYaw)
+    {
+        if (resetYaw) {
+            imu.resetYaw();
+            //pinpoint.resetPosAndIMU();
+        }
+        //pinpoint.update();
 
-        double maxPower = 1.0;
-        double maxSpeed = 1.0;  // make this slower for outreaches
+        double theta = Math.atan2(forward, right);
+        double r = Math.hypot(right, forward);
 
-        // This is needed to make sure we don't pass > 1.0 to any wheel
-        // It allows us to keep all of the motors in proportion to what they should
-        // be and not get clipped
+        //theta = AngleUnit.normalizeRadians(theta + pinpoint.getHeading(AngleUnit.RADIANS));
+        theta = AngleUnit.normalizeRadians(theta + imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.RADIANS));
+        double newRight = r * Math.cos(theta);
+        double newForward = r * Math.sin(theta);
+
+
+        double frontLeftPower = newForward - rotate - newRight;
+        double frontRightPower = newForward + rotate + newRight;
+        double backRightPower = newForward + rotate - newRight;
+        double backLeftPower = newForward - rotate + newRight;
+
+        double maxPower = 0.5;
+        double maxSpeed = 0.25;
+
         maxPower = Math.max(maxPower, Math.abs(frontLeftPower));
         maxPower = Math.max(maxPower, Math.abs(frontRightPower));
-        maxPower = Math.max(maxPower, Math.abs(backRightPower));
         maxPower = Math.max(maxPower, Math.abs(backLeftPower));
+        maxPower = Math.max(maxPower, Math.abs(backRightPower));
 
-        // We multiply by maxSpeed so that it can be set lower for outreaches
-        // When a young child is driving the robot, we may not want to allow full
-        // speed.
-        fl.setPower(maxSpeed * (frontLeftPower / maxPower));
-        fr.setPower(maxSpeed * (frontRightPower / maxPower));
-        bl.setPower(maxSpeed * (backLeftPower / maxPower));
-        br.setPower(maxSpeed * (backRightPower / maxPower));
+        frontLeft.setPower(maxSpeed * (frontLeftPower/maxPower));
+        frontRight.setPower(maxSpeed * frontRightPower/maxPower);
+        backLeft.setPower(maxSpeed * backLeftPower/maxPower);
+        backRight.setPower(maxSpeed * backRightPower/maxPower);
     }
+
+    public void drive(double forward, double right, double rotate)
+    {
+        double frontLeftPower = forward - rotate - right;
+        double frontRightPower = forward + rotate + right;
+        double backRightPower = forward + rotate - right;
+        double backLeftPower = forward - rotate + right;
+
+
+        double maxPower = 0.5;
+        double maxSpeed = 0.5;
+
+        maxPower = Math.max(maxPower, Math.abs(frontLeftPower));
+        maxPower = Math.max(maxPower, Math.abs(frontRightPower));
+        maxPower = Math.max(maxPower, Math.abs(backLeftPower));
+        maxPower = Math.max(maxPower, Math.abs(backRightPower));
+
+        frontLeft.setPower(maxSpeed * (frontLeftPower/maxPower));
+        frontRight.setPower(maxSpeed * frontRightPower/maxPower);
+        backLeft.setPower(maxSpeed * backLeftPower/maxPower);
+        backRight.setPower(maxSpeed * backRightPower/maxPower);
+    }
+
+    public void tester(boolean on)
+    {
+        if(on)
+        {
+            backLeft.setPower(0.5);
+        }
+        else
+        {
+            backLeft.setPower(0);
+        }
+
+    }
+
+
+
 }

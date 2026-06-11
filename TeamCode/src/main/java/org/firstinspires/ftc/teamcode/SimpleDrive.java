@@ -116,9 +116,16 @@ public class SimpleDrive {
         backRight.setPower(maxSpeed * backRightPower/maxPower);
     }
 
-    public void tester()
+    public void tester(boolean on)
     {
-        frontLeft.setPower(0.5);
+        if(on)
+        {
+            frontLeft.setPower(0.5);
+        }
+        else
+        {
+            frontLeft.setPower(0);
+        }
 
     }
 
